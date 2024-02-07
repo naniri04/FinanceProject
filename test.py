@@ -6,17 +6,15 @@ import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 from pandas import DataFrame
 import itertools
+import pandas as pd
+import mplfinance as mpf
+import matplotlib.animation as animation
 
-x = np.linspace(1, 4, 100)
+def d():
+    a = [0]
+    def f():
+        a[0] = 1
+    f()
+    print(a[0])
 
-# 그래프 그리기
-plt.plot(x, x, label='x=y')
-
-# 점 찍기
-plt.scatter([2, 4], [3, 1], color='red', label='Points')
-
-# 범례 추가
-plt.legend()
-
-# 그래프 보여주기
-plt.show()
+d()
