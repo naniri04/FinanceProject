@@ -10,11 +10,5 @@ import pandas as pd
 import mplfinance as mpf
 import matplotlib.animation as animation
 
-def d():
-    a = [0]
-    def f():
-        a[0] = 1
-    f()
-    print(a[0])
-
-d()
+df = pd.DataFrame({0:[1,2,3], 1:[2,3,4], 2:[3,4,5]})
+print(type(df.iloc[1,1]))
