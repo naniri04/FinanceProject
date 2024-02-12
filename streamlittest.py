@@ -1,30 +1,32 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib import font_manager, rc
-import matplotlib.ticker as mticker
-import seaborn
 import datetime
 import pandas as pd
-import mplfinance as mpf
 import streamlit as st
 import time
+import plotly.graph_objects as go
+import plotly.figure_factory as ff
+from plotly.subplots import make_subplots
 
 stock_list = pd.read_csv('DB/stock_list.csv', parse_dates=['SDate', 'EDate'], 
                          dtype={'Code':str, 'Name':str})
 stock_labels = stock_list['Code'] + ' ' + stock_list['Name']
-stylekwargs = dict(up='#b80000', down='#0059b8', wick='in', edge='in', volume='in', ohlc='black')
-plotkwargs = dict(type='candle', volume=True, style='charles', returnfig=True, scale_width_adjustment=dict(lines=0.7),
-                  ylabel='', ylabel_lower='')  # , num_panels=3, main_panel=0, volume_panel=2
-mystyle = mpf.make_mpf_style(marketcolors=mpf.make_marketcolors(**stylekwargs), facecolor='#d1d1d1')
 
 
-def func(dnum:int, df:pd.DataFrame, madf:pd.DataFrame):
-    addpl = mpf.make_addplot(madf.tail(dnum), type='line')
-    df_plot = df.tail(dnum)
-    fig, axlist = mpf.plot(df_plot, **plotkwargs, addplot=addpl)
-    # axlist[0].yaxis.set_label_position("right")
-    # axlist[0].yaxis.tick_right() 
-    # axlist[2].set_facecolor('k')
+def figure(dnum:int, enum:int, df:pd.DataFrame, madf:pd.DataFrame, hide_gap:bool=True):
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05, subplot_titles=('', ''), row_width=[0.2, 0.7])
+    # df = df.tail(dnum)
+
+    # ------ < Remove gaps between candlestick > ------
+    if hide_gap: x = df.index.strftime("%Y/%m/%d")
+    else: x = df.index
+
+    fig.add_trace(go.Candlestick(x=x, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close']), row=1, col=1)
+    fig.add_trace(go.Bar(x=x, y=df['Volume'], showlegend=False), row=2, col=1)
+    fig.update_layout(height=800)
+    fig.update_xaxes(nticks=5, showgrid=True, rangeslider_visible=False, range=(len(df)-dnum, len(df)-enum))
+    fig.update_yaxes(fixedrange=False)
+
     return fig
 
 
@@ -44,7 +46,7 @@ def main():
         with st.empty(): st.write(f"✔️ Task completed in {clock_time:.4f} seconds.") 
 
 
-    st.title("My Finance Project.")
+    st.sidebar.title("My Finance Project.")
     name = st.sidebar.selectbox(
         "Select stock.",
         tuple(stock_labels + ' ' + stock_list['Delisted'].apply(lambda x: '🛇' if x else '✔')),
@@ -60,7 +62,8 @@ def main():
     # st.dataframe(madf)
 
     dnum = st.sidebar.slider('Data Number', 1, 300, value=70)
-    st.pyplot(fig=func(dnum, df, madf))
+    enum = st.sidebar.slider('Ending Time', 0, len(df), value=0)
+    st.plotly_chart(figure(dnum, enum, df, madf), use_container_width=True)
     get_elapsed_time()
     
 
