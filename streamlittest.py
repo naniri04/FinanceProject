@@ -8,14 +8,24 @@ import plotly.graph_objects as go
 import plotly.figure_factory as ff
 from plotly.subplots import make_subplots
 
+# When using simple browser in vscode:
+# streamlit run streamlittest.py --server.headless true
+
 stock_list = pd.read_csv('DB/stock_list.csv', parse_dates=['SDate', 'EDate'], 
                          dtype={'Code':str, 'Name':str})
 stock_labels = stock_list['Code'] + ' ' + stock_list['Name']
 
 
+def cs_colorstyle(csdata, **kwargs):
+    csdata.increasing.fillcolor = kwargs['ii']
+    csdata.increasing.line.color = kwargs['il']
+    csdata.decreasing.fillcolor = kwargs['di']
+    csdata.decreasing.line.color = kwargs['dl']
+
+
 def figure(dnum:int, enum:int, df:pd.DataFrame, madf:pd.DataFrame, hide_gap:bool=True):
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05, subplot_titles=('', ''), row_width=[0.2, 0.7])
-    # df = df.tail(dnum)
+    df = df.iloc[enum:enum+dnum]
 
     # ------ < Remove gaps between candlestick > ------
     if hide_gap: x = df.index.strftime("%Y/%m/%d")
@@ -23,9 +33,12 @@ def figure(dnum:int, enum:int, df:pd.DataFrame, madf:pd.DataFrame, hide_gap:bool
 
     fig.add_trace(go.Candlestick(x=x, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close']), row=1, col=1)
     fig.add_trace(go.Bar(x=x, y=df['Volume'], showlegend=False), row=2, col=1)
-    fig.update_layout(height=800)
-    fig.update_xaxes(nticks=5, showgrid=True, rangeslider_visible=False, range=(len(df)-dnum, len(df)-enum))
-    fig.update_yaxes(fixedrange=False)
+    fig.update_traces(name='')
+    fig.update_layout(height=800, yaxis_tickformat='f', showlegend=False)
+    fig.update_xaxes(nticks=5, showgrid=True, rangeslider_visible=False, autorange='reversed')
+    fig.update_yaxes(tickformat='s', row=2, col=1)
+
+    cs_colorstyle(fig.data[0], ii='#f52047', il='#f52047', di='#14c0ff', dl='#14c0ff')
 
     return fig
 
@@ -37,7 +50,7 @@ def ma(df:pd.DataFrame, nlist:tuple):
     return pd.DataFrame(mal)
     
 
-def main():
+def main(): 
     starting_time = [0]
     def time_start():
         starting_time[0] = time.time()
@@ -55,7 +68,7 @@ def main():
     st.subheader(name)
  
     time_start()
-    df = pd.read_csv(f"DB/BackTesting/{name[:-2]}.csv")
+    df = pd.read_csv(f"DB/BackTesting/{name[:-2]}.csv").iloc[::-1]
     df.index = pd.to_datetime(df['Date'])
     df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
     madf = ma(df, (5, 10))
