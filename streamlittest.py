@@ -1,3 +1,7 @@
+# ------ < custom python files > ------
+# from pages.kiwoomdownload import main as kiwoompage
+
+# ------ < libraries > ------
 import numpy as np
 import matplotlib.pyplot as plt
 import datetime
@@ -78,7 +82,6 @@ def main():
     enum = st.sidebar.slider('Ending Time', 0, len(df), value=0)
     st.plotly_chart(figure(dnum, enum, df, madf), use_container_width=True)
     get_elapsed_time()
-    
 
 if __name__ == '__main__':
     main()
