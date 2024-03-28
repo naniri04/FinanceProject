@@ -15,9 +15,10 @@ from plotly.subplots import make_subplots
 # When using simple browser in vscode:
 # streamlit run streamlittest.py --server.headless true
 
-stock_list = pd.read_csv('DB/stock_list.csv', parse_dates=['SDate', 'EDate'], 
-                         dtype={'Code':str, 'Name':str})
-stock_labels = stock_list['Code'] + ' ' + stock_list['Name']
+# stock_list = pd.read_csv('DB/stock_list.csv', parse_dates=['SDate', 'EDate'], 
+#                          dtype={'Code':str, 'Name':str})
+# stock_labels = stock_list['Code'] + ' ' + stock_list['Name']
+stock_name_list = pd.read_csv('DB/20240314_stocklist.csv')['0'].values
 
 
 def cs_colorstyle(csdata, **kwargs):
@@ -35,8 +36,10 @@ def figure(dnum:int, enum:int, df:pd.DataFrame, madf:pd.DataFrame, hide_gap:bool
     if hide_gap: x = df.index.strftime("%Y/%m/%d")
     else: x = df.index
 
-    fig.add_trace(go.Candlestick(x=x, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close']), row=1, col=1)
-    fig.add_trace(go.Bar(x=x, y=df['Volume'], showlegend=False), row=2, col=1)
+    fig.add_trace(go.Candlestick(x=x, open=df['시가'], high=df['고가'], low=df['저가'], close=df['종가']), row=1, col=1)
+    fig.add_trace(go.Bar(x=x, y=df['거래량'], showlegend=False), row=2, col=1)
+    for col in madf.columns:
+        fig.add_trace(go.Line(x=x, y=madf[col]), row=1, col=1)
     fig.update_traces(name='')
     fig.update_layout(height=800, yaxis_tickformat='f', showlegend=False)
     fig.update_xaxes(nticks=5, showgrid=True, rangeslider_visible=False, autorange='reversed')
@@ -50,7 +53,7 @@ def figure(dnum:int, enum:int, df:pd.DataFrame, madf:pd.DataFrame, hide_gap:bool
 def ma(df:pd.DataFrame, nlist:tuple):
     mal = dict()
     for n in nlist:
-        mal[f'{n}ma'] = df['Close'].rolling(window=n).mean()
+        mal[f'{n}ma'] = df['종가'].iloc[::-1].rolling(window=n).mean().iloc[::-1]
     return pd.DataFrame(mal)
     
 
@@ -64,24 +67,26 @@ def main():
 
 
     st.sidebar.title("My Finance Project.")
-    name = st.sidebar.selectbox(
-        "Select stock.",
-        tuple(stock_labels + ' ' + stock_list['Delisted'].apply(lambda x: '🛇' if x else '✔')),
-        placeholder="Type to search...",
-    )
+    name = st.sidebar.selectbox("Select stock.", tuple(stock_name_list), placeholder="Type to search...")
     st.subheader(name)
  
     time_start()
-    df = pd.read_csv(f"DB/BackTesting/{name[:-2]}.csv").iloc[::-1]
-    df.index = pd.to_datetime(df['Date'])
-    df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
-    madf = ma(df, (5, 10))
+
+    df = pd.read_csv(f"DB/Chart/Not_Adjusted/{name}.csv")
+    df.index = pd.to_datetime(df['일자'])
+    ma_options = st.sidebar.multiselect(
+        'Select Moving-Averages',
+        (5, 20, 60, 120),
+        (5, 20, 60, 120))
+    madf = ma(df, ma_options)
     # st.dataframe(madf)
 
     dnum = st.sidebar.slider('Data Number', 1, 300, value=70)
     enum = st.sidebar.slider('Ending Time', 0, len(df), value=0)
     st.plotly_chart(figure(dnum, enum, df, madf), use_container_width=True)
+
     get_elapsed_time()
+
 
 if __name__ == '__main__':
     main()

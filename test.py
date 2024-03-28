@@ -10,10 +10,7 @@ import pandas as pd
 import mplfinance as mpf
 import matplotlib.animation as animation
 
-df = pd.DataFrame({0:[1,2,3], 1:[2,3,4], 2:[3,4,5]})
-print(type(df.iloc[1,1]))
-
-
+print(pd.read_csv('DB/20240314_stocklist.csv')['0'].array)
 
 
 ### unused ###
