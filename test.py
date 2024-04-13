@@ -12,6 +12,8 @@ import matplotlib.animation as animation
 
 print(pd.read_csv('DB/20240314_stocklist.csv')['0'].array)
 
+"dffdf".replace()
+
 
 ### unused ###
 
