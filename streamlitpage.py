@@ -13,7 +13,7 @@ import os
 from tqdm import tqdm
 
 # When using simple browser in vscode:
-# streamlit run chart_page.py --server.headless true
+# streamlit run streamlitpage.py --server.headless true
 # link: http://localhost:8501
 
 # region [CONSTANT]
@@ -26,7 +26,7 @@ MA_LINE_COLOR = ['#809903', '#a63700', '#008062', '#4e02e6', '#b80093', '#800062
 ma_width_adjust = lambda x: 20/(x+10)+1
 # endregion
 # region [FIELD]
-stock_code_list = pd.read_csv('DB/20240314_stocklist.csv')['0'].values
+stock_code_list = pd.read_csv('../../FinanceData/DB/20240314_stocklist.csv')['0'].values
 # endregion
 
 
@@ -148,7 +148,7 @@ def main():
     
     st.set_page_config(layout="wide")
     code = st.sidebar.selectbox("Select stock.", tuple(stock_code_list), placeholder="Type to search...")
-    data = load_data("DB/Chart/Not_Adjusted", dict(dtype={'수정주가구분':object, '수정비율':object}))
+    data = load_data("../../FinanceData/DB/Chart/Not_Adjusted", dict(dtype={'수정주가구분':object, '수정비율':object}))
     df = data[code]
     df.index = pd.to_datetime(df['일자'])
     ft = features(df)
