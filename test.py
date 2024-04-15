@@ -11,7 +11,13 @@ import mplfinance as mpf
 import matplotlib.animation as animation
 import streamlit as st
 
+def a():
+    return 1,2,3
 
+def b(a,s,d):
+    print(a,s,d)
+    
+b(a())
 
 
 # region unused

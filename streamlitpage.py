@@ -13,7 +13,7 @@ import os
 from tqdm import tqdm
 
 # When using simple browser in vscode:
-# streamlit run streamlittest.py --server.headless true
+# streamlit run chart_page.py --server.headless true
 # link: http://localhost:8501
 
 # region [CONSTANT]
@@ -37,9 +37,9 @@ def cs_colorstyle(csdata, **kwargs):
     csdata.decreasing.line.color = kwargs['dl']
 
 
-def figure(dnum:int, enum:int, df:pd.DataFrame, madf:pd.DataFrame, hide_gap:bool=True, ft=pd.DataFrame(), ftname=[]):
+def figure_chart(dnum:int, enum:int, df:pd.DataFrame, madf:pd.DataFrame, hide_gap:bool=True, ft=pd.DataFrame(), ftname=[]):
     feature_num = len(ft.columns)
-    feature_names = ['Candlestick', 'Volume'] + ftname
+    feature_names = ['Chart', 'Volume'] + ftname
     feature_names = [f"<b>{name}</b>" for name in feature_names]
     fig = make_subplots(rows=2+feature_num, cols=1, shared_xaxes=True, vertical_spacing=0.05
                         , subplot_titles=feature_names
@@ -107,6 +107,27 @@ def features(df:pd.DataFrame):
     return fts
 
 
+def figure_model_result(y_pred, y_test):
+    fig = make_subplots(rows=1, cols=3)
+    # fig.add_trace(go.Scatter(x=x, y=))
+    
+    
+    return fig
+    
+
+def fit_predict(X_train, X_test, y_train, y_test):
+    pass
+    # have to return y_pred, y_test
+
+
+def random_data_selection(df, y_option):
+    pass
+
+
+def estimate_eval(y_pred, y_test, eval_list:list):
+    return ""
+    
+
 @st.cache_data
 def load_data(fpath:str, arg:dict={}):
     ldir = os.listdir(fpath)
@@ -128,23 +149,37 @@ def main():
     st.set_page_config(layout="wide")
     code = st.sidebar.selectbox("Select stock.", tuple(stock_code_list), placeholder="Type to search...")
     data = load_data("DB/Chart/Not_Adjusted", dict(dtype={'수정주가구분':object, '수정비율':object}))
- 
-    time_start()
-
     df = data[code]
     df.index = pd.to_datetime(df['일자'])
+    ft = features(df)
+    wd = pd.concat([df, ft], axis=1)
     ma_options = st.sidebar.multiselect(
         'Select Moving-Averages',
         (1, 5, 20, 60, 120),  # options
         (5, 20))  # default
     madf = ma(df, ma_options)
 
-    dnum = st.sidebar.slider('Data Number', 1, 300, value=70)
+    # region [PAGE: CHART]
+    time_start()
+
+    dnum = st.sidebar.slider('Data Number', 1, 300, value=140)
     enum = st.sidebar.slider('Ending Time', 0, len(df), value=0)
-    st.plotly_chart(figure(dnum, enum, df, madf, ft=features(df), ftname=['Grad'])
+    st.plotly_chart(figure_chart(dnum, enum, df, madf, ft=ft, ftname=['Grad'])
                     , use_container_width=True, config={'displayModeBar': False})
 
     get_elapsed_time()
+    # endregion
+    st.subheader('Modeling', divider='rainbow')
+    # region [PAGE: MODEL]
+    
+    lc, rc = st.columns(2)
+    if lc.button("Fit Model"):
+        y_pred, y_test = fit_predict(*random_data_selection(wd, '종가'))
+        rc.text(estimate_eval(y_pred, y_test, eval_list=['MSE', 'R2']))
+        st.plotly_chart(figure_model_result(y_pred, y_test)
+                        , use_container_width=True, config={'displayModeBar': False})
+    
+    # endregion
 
 
 if __name__ == '__main__':
