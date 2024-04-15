@@ -9,13 +9,12 @@ import itertools
 import pandas as pd
 import mplfinance as mpf
 import matplotlib.animation as animation
-
-print(pd.read_csv('DB/20240314_stocklist.csv')['0'].array)
-
-"dffdf".replace()
+import streamlit as st
 
 
-### unused ###
+
+
+# region unused
 
 # stylekwargs = dict(up='#b80000', down='#0059b8', wick='in', edge='in', volume='in', ohlc='black')
 # plotkwargs = dict(type='candle', volume=True, style='charles', returnfig=True, scale_width_adjustment=dict(lines=0.7),
@@ -28,3 +27,5 @@ print(pd.read_csv('DB/20240314_stocklist.csv')['0'].array)
 # axlist[0].yaxis.set_label_position("right")
 # axlist[0].yaxis.tick_right() 
 # axlist[2].set_facecolor('k')
+
+# endregion

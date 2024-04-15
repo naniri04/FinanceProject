@@ -3,6 +3,10 @@
     -> jupyter notebook
     으로 주피터노트북을 열어야 정상 작동.
 
+df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
+mpf.plot(df, type='candle')
+위 코드로 간단히 캔들스틱 출력 가능
+
 Finance Features:
     직선, 수평 추세선
         추세선과의 이격도
