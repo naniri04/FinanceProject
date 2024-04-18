@@ -2,7 +2,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-import datetime
+from datetime import datetime
 import pandas as pd
 import streamlit as st
 import time
@@ -11,9 +11,11 @@ import plotly.figure_factory as ff
 from plotly.subplots import make_subplots
 import os
 from tqdm import tqdm
+from sklearn.model_selection import train_test_split
+from sklearn.neighbors import KNeighborsClassifier
 
 # When using simple browser in vscode:
-# streamlit run streamlitpage.py --server.headless true
+# streamlit run streamlitpage.py --server.headless true --server.runOnSave true
 # link: http://localhost:8501
 
 # region [CONSTANT]
@@ -103,36 +105,80 @@ def ma(df:pd.DataFrame, nlist:tuple):
 def features(df:pd.DataFrame):
     fts = pd.DataFrame(index=df.index)
     fts['grad'] = (df['종가'].shift(1) - df['종가'].shift(-1)) / df['종가'] * 100
-    
+    fts['rate'] = ((df['종가'] - df['종가'].shift(-1)) / df['종가'].shift(-1)) * 100
     return fts
-
-
-def figure_model_result(y_pred, y_test):
-    fig = make_subplots(rows=1, cols=3)
-    # fig.add_trace(go.Scatter(x=x, y=))
-    
-    
-    return fig
     
 
-def fit_predict(X_train, X_test, y_train, y_test):
-    pass
+def modeling(data:dict[str, pd.DataFrame], **dl):
+    '''
+    data: whole dataframes without features
+    dl: [sd, ed, test_size]
+    return: y_pred_test, y_pred_train, y_test, y_train, r_train, r_test, (sel_num, whole_num)
+    '''
+    def selection_cond(x: pd.Series):
+        cond = x['종가'] > 100000
+        return cond
+    
+    def make_xyr(df:pd.DataFrame):
+        X = df.loc[:, ['종가', '거래대금', 'grad', 'rate']]
+        y = (df['rate'] > 0.23).shift(1)
+        r = df['rate']
+        # breakpoint()
+        X.dropna(inplace=True); y.dropna(inplace=True)
+        common_index = X.index.intersection(y.index)
+        return X.loc[common_index], y.loc[common_index], r.loc[common_index]
+    
+    def data_selection():  # return X_train, X_test, y_train, y_test, r_train, r_test, selection_rate 
+        xl, yl, rl = [], [], []; whole_num, sel_num = 0, 0
+        for k in tqdm(data.keys(), desc="Data Selecting"):
+            df = data[k].loc[dl['ed']:dl['sd']]
+            wd = pd.concat([df, features(df)], axis=1)
+            selected = wd.loc[(bl := wd.apply(selection_cond, axis=1))]
+            selected.index = [(i, k) for i in selected.index]
+            whole_num += len(bl); sel_num += sum(bl)
+            x_part, y_part, r_part = make_xyr(selected)
+            xl.append(x_part); yl.append(y_part); rl.append(r_part)
+        X = pd.concat(xl, axis=0, ignore_index=False); y = pd.concat(yl, axis=0, ignore_index=False).astype(int)
+        r = pd.concat(rl, axis=0, ignore_index=False)
+        X.sort_index(inplace=True); y.sort_index(inplace=True); r.sort_index(inplace=True)
+        X_train, X_test, y_train, y_test, r_train, r_test = train_test_split(X, y, r, test_size=dl['test_size'], shuffle=False)
+        #
+        return X_train, X_test, y_train, y_test, r_train, r_test, (sel_num, whole_num)
+    
+    def classification(X_train, X_test, y_train, y_test):
+        model = KNeighborsClassifier()
+        model.fit(X_train, y_train)
+        y_pred_test = model.predict_proba(X_test)[:, 1].tolist()
+        y_pred_train = model.predict_proba(X_train)[:, 1].tolist()
+        #
+        return y_pred_test, y_pred_train
+    
+    
+    X_train, X_test, y_train, y_test, r_train, r_test, sel_tup = data_selection()
+    y_pred_test, y_pred_train = classification(X_train, X_test, y_train, y_test)
+    
+    return y_pred_test, y_pred_train, y_test, y_train, r_train, r_test, sel_tup
     # have to return y_pred, y_test
-
-
-def random_data_selection(df, y_option):
-    pass
 
 
 def estimate_eval(y_pred, y_test, eval_list:list):
     return ""
+
+
+def figure_model_result(y_pred_test, y_pred_train, y_test, y_train, r_train, r_test):
+    fig = make_subplots(rows=1, cols=3)
+    fig.add_trace(go.Scatter(x=r_test, y=y_pred_test, mode='markers'), row=1, col=1)
+    fig.update_layout(yaxis_range=[0, 1], xaxis_range=[-30, 30])
+    
+    return fig
     
 
 @st.cache_data
 def load_data(fpath:str, arg:dict={}):
     ldir = os.listdir(fpath)
     files = [fname for fname in ldir if os.path.isfile(os.path.join(fpath, fname))]
-    data = {fname.removesuffix('.csv'):pd.read_csv('/'.join([fpath, fname]), **arg) for fname in tqdm(files)}
+    data = {fname.removesuffix('.csv'):pd.read_csv('/'.join([fpath, fname]), **arg) for fname in tqdm(files, desc="Loading Data")}
+    for k in data: data[k].index = pd.to_datetime(data[k]['일자'])
     return data
     
 
@@ -150,7 +196,6 @@ def main():
     code = st.sidebar.selectbox("Select stock.", tuple(stock_code_list), placeholder="Type to search...")
     data = load_data("../../FinanceData/DB/Chart/Not_Adjusted", dict(dtype={'수정주가구분':object, '수정비율':object}))
     df = data[code]
-    df.index = pd.to_datetime(df['일자'])
     ft = features(df)
     wd = pd.concat([df, ft], axis=1)
     ma_options = st.sidebar.multiselect(
@@ -172,11 +217,12 @@ def main():
     st.subheader('Modeling', divider='rainbow')
     # region [PAGE: MODEL]
     
-    lc, rc = st.columns(2)
-    if lc.button("Fit Model"):
-        y_pred, y_test = fit_predict(*random_data_selection(wd, '종가'))
-        rc.text(estimate_eval(y_pred, y_test, eval_list=['MSE', 'R2']))
-        st.plotly_chart(figure_model_result(y_pred, y_test)
+    if st.button("Fit Model"):
+        print('fit!')
+        y_pred_test, y_pred_train, y_test, y_train, r_train, r_test, sel_tup = \
+            modeling(data, sd=datetime(2024,1,1), ed=datetime(2024,2,1), test_size=0.2)
+        # st.text(estimate_eval(y_pred, y_test, eval_list=['MSE', 'R2']))
+        st.plotly_chart(figure_model_result(y_pred_test, y_pred_train, y_test, y_train, r_train, r_test)
                         , use_container_width=True, config={'displayModeBar': False})
     
     # endregion

@@ -10,14 +10,13 @@ import pandas as pd
 import mplfinance as mpf
 import matplotlib.animation as animation
 import streamlit as st
+from sklearn.model_selection import train_test_split
 
-def a():
-    return 1,2,3
-
-def b(a,s,d):
-    print(a,s,d)
+df = pd.DataFrame({'a':[1,2,3], 'b': [4,5,6]})
+a = [1,2,3]; b = [4,5,6]
     
-b(a())
+a1, a2, a3, a4, a5, a6 = train_test_split(df, a, b, test_size=0.3)
+print(a1, a2); print(a3, a4); print(a5, a6)
 
 
 # region unused
