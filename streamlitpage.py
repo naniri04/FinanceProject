@@ -123,30 +123,31 @@ def modeling(data:dict[str, pd.DataFrame], **dl):
         X = df.loc[:, ['종가', '거래대금', 'grad', 'rate']]
         y = (df['rate'] > 0.23).shift(1)
         r = df['rate']
-        # breakpoint()
         X.dropna(inplace=True); y.dropna(inplace=True)
         common_index = X.index.intersection(y.index)
         return X.loc[common_index], y.loc[common_index], r.loc[common_index]
     
     def data_selection():  # return X_train, X_test, y_train, y_test, r_train, r_test, selection_rate 
-        xl, yl, rl = [], [], []; whole_num, sel_num = 0, 0
+        Xl, yl, rl = [], [], []; whole_num, sel_num = 0, 0; names = ['X', 'y', 'r']
+        #
         for k in tqdm(data.keys(), desc="Data Selecting"):
             df = data[k].loc[dl['ed']:dl['sd']]
             wd = pd.concat([df, features(df)], axis=1)
             selected = wd.loc[(bl := wd.apply(selection_cond, axis=1))]
             selected.index = [(i, k) for i in selected.index]
             whole_num += len(bl); sel_num += sum(bl)
-            x_part, y_part, r_part = make_xyr(selected)
-            xl.append(x_part); yl.append(y_part); rl.append(r_part)
-        X = pd.concat(xl, axis=0, ignore_index=False); y = pd.concat(yl, axis=0, ignore_index=False).astype(int)
+            X_part, y_part, r_part = make_xyr(selected)
+            for n in names: exec(f"{n}l.append({n}_part)")
+        X = pd.concat(Xl, axis=0, ignore_index=False); y = pd.concat(yl, axis=0, ignore_index=False).astype(int)
         r = pd.concat(rl, axis=0, ignore_index=False)
-        X.sort_index(inplace=True); y.sort_index(inplace=True); r.sort_index(inplace=True)
+        for n in names: exec(f"{n}.sort_index(inplace=True)")
         X_train, X_test, y_train, y_test, r_train, r_test = train_test_split(X, y, r, test_size=dl['test_size'], shuffle=False)
         #
         return X_train, X_test, y_train, y_test, r_train, r_test, (sel_num, whole_num)
     
     def classification(X_train, X_test, y_train, y_test):
         model = KNeighborsClassifier()
+        #
         model.fit(X_train, y_train)
         y_pred_test = model.predict_proba(X_test)[:, 1].tolist()
         y_pred_train = model.predict_proba(X_train)[:, 1].tolist()
@@ -156,9 +157,8 @@ def modeling(data:dict[str, pd.DataFrame], **dl):
     
     X_train, X_test, y_train, y_test, r_train, r_test, sel_tup = data_selection()
     y_pred_test, y_pred_train = classification(X_train, X_test, y_train, y_test)
-    
+    #
     return y_pred_test, y_pred_train, y_test, y_train, r_train, r_test, sel_tup
-    # have to return y_pred, y_test
 
 
 def estimate_eval(y_pred, y_test, eval_list:list):
@@ -169,7 +169,7 @@ def figure_model_result(y_pred_test, y_pred_train, y_test, y_train, r_train, r_t
     fig = make_subplots(rows=1, cols=3)
     fig.add_trace(go.Scatter(x=r_test, y=y_pred_test, mode='markers'), row=1, col=1)
     fig.update_layout(yaxis_range=[0, 1], xaxis_range=[-30, 30])
-    
+    #
     return fig
     
 
@@ -196,7 +196,7 @@ def main():
     code = st.sidebar.selectbox("Select stock.", tuple(stock_code_list), placeholder="Type to search...")
     data = load_data("../../FinanceData/DB/Chart/Not_Adjusted", dict(dtype={'수정주가구분':object, '수정비율':object}))
     df = data[code]
-    ft = features(df)
+    ft = features(df); ftname = ['Grad', 'rate']
     wd = pd.concat([df, ft], axis=1)
     ma_options = st.sidebar.multiselect(
         'Select Moving-Averages',
@@ -209,7 +209,7 @@ def main():
 
     dnum = st.sidebar.slider('Data Number', 1, 300, value=140)
     enum = st.sidebar.slider('Ending Time', 0, len(df), value=0)
-    st.plotly_chart(figure_chart(dnum, enum, df, madf, ft=ft, ftname=['Grad'])
+    st.plotly_chart(figure_chart(dnum, enum, df, madf, ft=ft, ftname=ftname)
                     , use_container_width=True, config={'displayModeBar': False})
 
     get_elapsed_time()
