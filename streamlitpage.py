@@ -45,13 +45,12 @@ def cs_colorstyle(csdata, **kwargs):
     csdata.decreasing.line.color = kwargs['dl']
 
 
-def figure_chart(dnum:int, enum:int, df:pd.DataFrame, madf:pd.DataFrame, hide_gap:bool=True, ft=pd.DataFrame(), ftname=[]):
-    ft = ft.loc[:,ftname]
-    feature_num = len(ft.columns)
+def figure_chart(dnum:int, enum:int, df:pd.DataFrame, hide_gap:bool=True, ft=pd.DataFrame(), ftname=[], ma=[]):
+    ft = ft.loc[:,[n for n in ftname if n in ft.columns]]
+    feature_num = len(ftname)
     feature_names = ['Chart', 'Volume'] + ftname
-    feature_names = [f"<b>{name}</b>" for name in feature_names]
     fig = make_subplots(rows=2+feature_num, cols=1, shared_xaxes=True, vertical_spacing=0.05
-                        , subplot_titles=feature_names
+                        , subplot_titles=[f"<b>{name}</b>" for name in feature_names]
                         , row_heights=[1, 0.25]+[0.25]*feature_num)
     
     # region [PLOTTING CANDLESTICK AND VOLUME]
@@ -67,11 +66,13 @@ def figure_chart(dnum:int, enum:int, df:pd.DataFrame, madf:pd.DataFrame, hide_ga
     adjustment_label = df.drop(df.loc[df['수정비율'].isna()].index)
     fig.add_trace(go.Candlestick(x=x, open=df['시가'], high=df['고가'], low=df['저가'], close=df['종가']), row=1, col=1)
     fig.add_trace(go.Bar(x=x, y=df['거래량'], showlegend=False), row=2, col=1)
-    for r in adjustment_label.values:
-        fig.add_annotation(x=r[0].replace('-', '/'), y=r[3]-y_delta*0.01, text=f"{ADJUSTED_SIGN[r[7]]}:{r[8]}", ay=min_price, ax=0, ayref='y'
-                           , bordercolor="#000000", showarrow=True, bgcolor="#ffe642", arrowwidth=1.3, opacity=1, yanchor='top', row=1, col=1)
-    for i in range(len(madf.columns)):
-        fig.add_trace(go.Scatter(x=x, y=madf.iloc[enum:enum+dnum, i], mode='lines', line_color=MA_LINE_COLOR[i]
+    for i, r in adjustment_label.iterrows(): 
+        fig.add_annotation(x=r.name.strftime('%Y/%m/%d'), y=r['저가']-y_delta*0.01
+                           , text=f"{ADJUSTED_SIGN[r['수정주가구분']]}:{r['수정비율']}"
+                           , ay=min_price, ax=0, ayref='y', bordercolor="#000000", showarrow=True, bgcolor="#ffe642"
+                           , arrowwidth=1.3, opacity=1, yanchor='top', row=1, col=1)
+    for i, n in enumerate(ma):
+        fig.add_trace(go.Scatter(x=x, y=df[f'ma{n}'].iloc[enum:enum+dnum], mode='lines', line_color=MA_LINE_COLOR[i]
                                  , line_width=ma_width_adjust(dnum)), row=1, col=1)
     fig.update_layout(height=625+125*feature_num, yaxis_tickformat='f', showlegend=False
                       , yaxis_range=[min_price-y_delta*0.02, max_price+y_delta*0.02])
@@ -84,8 +85,10 @@ def figure_chart(dnum:int, enum:int, df:pd.DataFrame, madf:pd.DataFrame, hide_ga
     # endregion
     # region [PLOTTING ADDITIONAL FEATURES]
     
-    for i in range(feature_num):
-        fig.add_trace(go.Scatter(x=x, y=ft.iloc[enum:enum+dnum, i], mode='lines', line_color='#000000'
+    for i, n in enumerate(feature_names[2:]):
+        if n in ft.columns: y = ft[n].iloc[enum:enum+dnum]
+        else: y = df[n].iloc[enum:enum+dnum]
+        fig.add_trace(go.Scatter(x=x, y=y, mode='lines', line_color='#000000'
                                  , line_width=ma_width_adjust(dnum)), row=3+i, col=1)
     
     # endregion
@@ -100,13 +103,6 @@ def figure_chart(dnum:int, enum:int, df:pd.DataFrame, madf:pd.DataFrame, hide_ga
     # endregion
 
     return fig
-
-
-def ma(df:pd.DataFrame, nlist:tuple):
-    mal = dict()
-    for n in nlist:
-        mal[f'{n}ma'] = df['종가'].iloc[::-1].rolling(window=n).mean().iloc[::-1]
-    return pd.DataFrame(mal)
     
     
 def features(df:pd.DataFrame):
@@ -116,8 +112,12 @@ def features(df:pd.DataFrame):
         return lags
     
     fts = pd.DataFrame(index=df.index)
-    fts['rate'] = ((df['종가'] - df['종가'].shift(-1)) / df['종가'].shift(-1)) * 100
-    fts = pd.concat([fts, lag(fts, 'rate', 10)], axis=1)
+    # fts['rate'] = ((df['종가'] - df['종가'].shift(-1)) / df['종가'].shift(-1)) * 100
+    # fts = pd.concat([fts, lag(fts, 'rate', 10)], axis=1)
+    # for n in [5,20,60,120]:
+    #     fts[f'ma{n}'] = df['종가'].iloc[::-1].rolling(window=n).mean().iloc[::-1]
+    #     fts[f'ma{n}disp'] = df['종가'] / fts[f'ma{n}'] * 100
+    #     fts = pd.concat([fts, lag(fts, f'ma{n}disp', 5)], axis=1)
     #
     return fts
     
@@ -129,15 +129,16 @@ def modeling(data:dict[str, pd.DataFrame], **dl):
     return: y_pred_test, y_pred_train, y_test, y_train, r_train, r_test, (sel_num, whole_num)
     '''
     def selection_cond(x: pd.Series):
-        cond = x['종가'] > 1000
+        cond = x['rate']>5 and x['종가'] > 1000
         return cond
     
     def make_xyr(df:pd.DataFrame):
-        ft_names = ['종가', '거래대금', 'rate'] + [f"rate_lag_{i}" for i in range(1, 11)]
-        X = df.loc[:, ft_names]
-        y = (df['rate'] > 0).shift(1)
-        r = df['rate']
-        #
+        ft_names = list(df.columns)
+        ft_exclude = ['수정주가구분', '수정비율', '일자', 'y']
+        X = df.loc[:, [ft for ft in ft_names if ft not in ft_exclude]]
+        y = (df['y'] > 29)
+        r = df['y']
+        # breakpoint()
         X.dropna(inplace=True); y.dropna(inplace=True)
         common_index = X.index.intersection(y.index)
         return X.loc[common_index], y.loc[common_index], r.loc[common_index]
@@ -163,10 +164,11 @@ def modeling(data:dict[str, pd.DataFrame], **dl):
         return X_train, X_test, y_train, y_test, r_train, r_test, (sel_num, whole_num)
     
     def classification(X_train, X_test, y_train, y_test):
-        model = RandomForestClassifier()
+        model = KNeighborsClassifier(n_neighbors=1)
         #
         model.fit(X_train, y_train)
-        y_pred_test = model.predict_proba(X_test)[:, 1].tolist()
+        y_pred_test = model.predict_proba(X_test)
+        y_pred_test = y_pred_test[:, 1].tolist()
         y_pred_train = model.predict_proba(X_train)[:, 1].tolist()
         #
         return y_pred_test, y_pred_train
@@ -199,7 +201,7 @@ def load_data(fpath:str, arg:dict={}):
     ldir = os.listdir(fpath)
     files = [fname for fname in ldir if os.path.isfile(os.path.join(fpath, fname))]
     data = {fname.removesuffix('.csv'):pd.read_csv('/'.join([fpath, fname]), **arg) for fname in tqdm(files, desc="Loading Data")}
-    for k in data: data[k].index = pd.to_datetime(data[k]['일자'])
+    # for k in data: data[k].index = pd.to_datetime(data[k]['일자'])
     return data
     
 
@@ -215,22 +217,23 @@ def main():
     
     st.set_page_config(layout="wide")
     code = st.sidebar.selectbox("Select stock.", tuple(stock_code_list), placeholder="Type to search...")
-    data = load_data("../../FinanceData/DB/Chart/Not_Adjusted", dict(dtype={'수정주가구분':object, '수정비율':object}))
+    data = load_data("../../FinanceData/DB/AllFeatures"
+                     , arg=dict(dtype={'수정주가구분':object, '수정비율':object}, parse_dates=['일자'], index_col='일자'))
     df = data[code]
     ft = features(df); ftname = ['rate']
     wd = pd.concat([df, ft], axis=1)
+    st.dataframe(df)
     ma_options = st.sidebar.multiselect(
         'Select Moving-Averages',
         (1, 5, 20, 60, 120),  # options
         (5, 20))  # default
-    madf = ma(df, ma_options)
 
     # region [PAGE: CHART]
     time_start()
 
     dnum = st.sidebar.slider('Data Number', 1, 300, value=140)
     enum = st.sidebar.slider('Ending Time', 0, len(df), value=0)
-    st.plotly_chart(figure_chart(dnum, enum, df, madf, ft=ft, ftname=ftname)
+    st.plotly_chart(figure_chart(dnum, enum, df, ft=ft, ftname=ftname, ma=ma_options)
                     , use_container_width=True, config={'displayModeBar': False})
 
     get_elapsed_time()
@@ -241,7 +244,7 @@ def main():
     if st.button("Fit Model"):
         print('fit!')
         y_pred_test, y_pred_train, y_test, y_train, r_train, r_test, sel_tup = \
-            modeling(data, sd=datetime(2023,12,15), ed=datetime(2024,2,1), test_size=0.1)
+            modeling(data, sd=datetime(2023,1,1), ed=datetime(2023,5,1), test_size=0.1)
         st.text(f"{sel_tup[0]} / {sel_tup[1]}")
         # st.text(estimate_eval(y_pred, y_test, eval_list=['MSE', 'R2']))
         st.plotly_chart(figure_model_result(y_pred_test, y_pred_train, y_test, y_train, r_train, r_test)

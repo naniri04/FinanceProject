@@ -15,8 +15,8 @@ from sklearn.model_selection import train_test_split
 df = pd.DataFrame({'a':[1,2,3], 'b': [4,5,6]})
 a = [1,2,3]; b = [4,5,6]
     
-a1, a2, a3, a4, a5, a6 = train_test_split(df, a, b, test_size=0.3)
-print(a1, a2); print(a3, a4); print(a5, a6)
+df.index = df['a']
+print(df)
 
 
 # region unused
