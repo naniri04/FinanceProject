@@ -16,8 +16,10 @@ from tqdm import tqdm
 # region [MODEL]
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.neighbors import KNeighborsRegressor
+from catboost import CatBoostRegressor
+import sklearn.metrics as metrics
 # endregion
 
 # When using simple browser in vscode:
@@ -112,42 +114,40 @@ def features(df:pd.DataFrame):
         return lags
     
     fts = pd.DataFrame(index=df.index)
-    # fts['rate'] = ((df['종가'] - df['종가'].shift(-1)) / df['종가'].shift(-1)) * 100
-    # fts = pd.concat([fts, lag(fts, 'rate', 10)], axis=1)
-    # for n in [5,20,60,120]:
-    #     fts[f'ma{n}'] = df['종가'].iloc[::-1].rolling(window=n).mean().iloc[::-1]
-    #     fts[f'ma{n}disp'] = df['종가'] / fts[f'ma{n}'] * 100
-    #     fts = pd.concat([fts, lag(fts, f'ma{n}disp', 5)], axis=1)
-    #
     return fts
+
+
+# def display_features(df:pd.DataFrame):
+    
     
 
-def modeling(data:dict[str, pd.DataFrame], **dl):
+def modeling(data:dict[str, pd.DataFrame], sub=[], **dl):
     '''
     data: whole dataframes without features
     dl: [sd, ed, test_size]
     return: y_pred_test, y_pred_train, y_test, y_train, r_train, r_test, (sel_num, whole_num)
     '''
     def selection_cond(x: pd.Series):
-        cond = x['rate']>5 and x['종가'] > 1000
+        cond = x['rate'] > 29 and (x['ma60'] > x['ma120'])
+        # cond=True
         return cond
     
     def make_xyr(df:pd.DataFrame):
-        ft_names = list(df.columns)
+        ft_names = ['거래량', 'rate'] + [f'rate_lag_{n}' for n in range(1, 11)] + ['ma5disp'] + ['ma20disp']
         ft_exclude = ['수정주가구분', '수정비율', '일자', 'y']
         X = df.loc[:, [ft for ft in ft_names if ft not in ft_exclude]]
-        y = (df['y'] > 29)
+        y = df['y']
         r = df['y']
         # breakpoint()
         X.dropna(inplace=True); y.dropna(inplace=True)
         common_index = X.index.intersection(y.index)
         return X.loc[common_index], y.loc[common_index], r.loc[common_index]
     
-    # @st.cache_data
+    @st.cache_data
     def data_selection():  # return X_train, X_test, y_train, y_test, r_train, r_test, selection_rate 
         Xl, yl, rl = [], [], []; whole_num, sel_num = 0, 0; names = ['X', 'y', 'r']
         #
-        for k in tqdm(data.keys(), desc="Data Selecting"):
+        for k in tqdm((sub if sub else data.keys()), desc="Data Selecting"):
             df = data[k].loc[dl['ed']:dl['sd']]
             wd = pd.concat([df, features(df)], axis=1)
             selected = wd.loc[(bl := wd.apply(selection_cond, axis=1))]
@@ -159,17 +159,16 @@ def modeling(data:dict[str, pd.DataFrame], **dl):
         r = pd.concat(rl, axis=0, ignore_index=False)
         for n in names: exec(f"{n}.sort_index(inplace=True)")
         X_train, X_test, y_train, y_test, r_train, r_test = train_test_split(X, y, r, test_size=dl['test_size'], shuffle=False)
-        st.dataframe(X_test)
+        # st.dataframe(X_test)
         #
         return X_train, X_test, y_train, y_test, r_train, r_test, (sel_num, whole_num)
     
     def classification(X_train, X_test, y_train, y_test):
-        model = KNeighborsClassifier(n_neighbors=1)
+        model = CatBoostRegressor(iterations=4500, verbose=2000)
         #
         model.fit(X_train, y_train)
-        y_pred_test = model.predict_proba(X_test)
-        y_pred_test = y_pred_test[:, 1].tolist()
-        y_pred_train = model.predict_proba(X_train)[:, 1].tolist()
+        y_pred_test = model.predict(X_test).tolist()
+        y_pred_train = model.predict(X_train).tolist()
         #
         return y_pred_test, y_pred_train
     
@@ -181,16 +180,21 @@ def modeling(data:dict[str, pd.DataFrame], **dl):
 
 
 def estimate_eval(y_pred, y_test, eval_list:list):
-    return ""
+    result = ''
+    if "mse" in eval_list: result += f"MSE: {metrics.mean_squared_error(y_pred=y_pred, y_true=y_test)}\n"
+    if "r2" in eval_list: result += f"R^2: {metrics.r2_score(y_pred=y_pred, y_true=y_test)}\n"
+    return result
 
 
 def figure_model_result(y_pred_test, y_pred_train, y_test, y_train, r_train, r_test):
     fig = make_subplots(rows=1, cols=1)
     fig.add_trace(go.Scatter(x=r_test, y=y_pred_test, mode='markers'), row=1, col=1)
+    m, b = np.polyfit(r_test, y_pred_test, 1)
+    fig.add_trace(go.Scatter(x=r_test, y=m*r_test+b, mode='lines', name='Regression Line', line=dict(width=3)))
     # fig.add_trace(go.Histogram2dContour(x=r_test, y=y_pred_test), row=1, col=1)
-    fig.update_layout(yaxis_range=[0, 1], xaxis_range=[-30, 30])
+    fig.update_layout(yaxis_range=[-30, 30], xaxis_range=[-30, 30])
     fig.update_traces(marker=dict(size=2))
-    fig.add_hline(y=0.5, line_width=0.5, line_color="red", row=1, col=1)
+    fig.add_hline(y=0, line_width=0.5, line_color="red", row=1, col=1)
     fig.add_vline(x=0, line_width=0.5, line_color="red", row=1, col=1)
     #
     return fig
@@ -222,7 +226,7 @@ def main():
     df = data[code]
     ft = features(df); ftname = ['rate']
     wd = pd.concat([df, ft], axis=1)
-    st.dataframe(df)
+    # st.dataframe(df)
     ma_options = st.sidebar.multiselect(
         'Select Moving-Averages',
         (1, 5, 20, 60, 120),  # options
@@ -242,11 +246,10 @@ def main():
     # region [PAGE: MODEL]
     
     if st.button("Fit Model"):
-        print('fit!')
         y_pred_test, y_pred_train, y_test, y_train, r_train, r_test, sel_tup = \
-            modeling(data, sd=datetime(2023,1,1), ed=datetime(2023,5,1), test_size=0.1)
+            modeling(data, sub=[], sd=datetime(2015,5,1), ed=datetime(2024,3,1), test_size=0.1)
         st.text(f"{sel_tup[0]} / {sel_tup[1]}")
-        # st.text(estimate_eval(y_pred, y_test, eval_list=['MSE', 'R2']))
+        st.text(estimate_eval(y_pred_test, y_test, eval_list=['mse', 'r2']))
         st.plotly_chart(figure_model_result(y_pred_test, y_pred_train, y_test, y_train, r_train, r_test)
                         , use_container_width=True, config={'displayModeBar': False})
     
