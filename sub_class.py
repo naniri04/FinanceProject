@@ -16,9 +16,16 @@ class StockDatasetHDF5:
         with h5py.File(H5PATH, 'r') as store:
             self._tickers = list(store['chart/inlisted_1m/'].keys()) + list(store['chart/delisted_1m/'].keys())
             self._inlisted_tickers_set = set(store['chart/inlisted_1m/'].keys())
+            self._delisted_tickers_set = set(store['chart/delisted_1m/'].keys())
         
         self.ticker_list = ticker_list if ticker_list else self._tickers
         self.date_range = date_range if date_range else [ST, ED]
+        
+        l = []
+        for ticker in ticker_list:
+            if ticker not in self._inlisted_tickers_set and ticker not in self._delisted_tickers_set:
+                l.append(ticker)
+        if l: print(f"Those tickers are not in dataset: {l}")
         
     def __len__(self):
         return len(self.ticker_list)

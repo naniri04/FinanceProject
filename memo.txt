@@ -1,0 +1,2 @@
+highlight = shift+f9
+bookmark = ctrl+alt+b
