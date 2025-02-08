@@ -1,5 +1,5 @@
 # Library
-from config import *
+from myconfig import *
 import pandas as pd
 from datetime import datetime, timedelta
 import h5py

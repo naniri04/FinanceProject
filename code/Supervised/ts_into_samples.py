@@ -1,5 +1,5 @@
 from hdf5_loader import StockDatasetHDF5
-from config import *
+from myconfig import *
 
 import pandas as pd
 import numpy as np
