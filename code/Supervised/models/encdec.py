@@ -21,7 +21,7 @@ class CustomAddLayer(nn.Module):
 
 
 class CustomCNN(nn.Module):
-    def __init__(self, hz_dim:dict, hz_order:list):
+    def __init__(self, hz_dim:dict, hz_order:list, out_dim:int):
         super(CustomCNN, self).__init__()
         
         def get_conv1d_output_length(conv_layer:nn.Conv1d, input_length):
@@ -30,6 +30,7 @@ class CustomCNN(nn.Module):
                     - 1) // conv_layer.stride[0] + 1
             
         self.hzs = hz_order
+        self.out_dim = out_dim
         extractors = {}; hz_latent_dim = {}
         
         #region extractors
@@ -67,13 +68,13 @@ class CustomCNN(nn.Module):
         # Update the features dim manually
         self.features_dim = hz_latent_dim[next_hz]
         
-        self.v = nn.Sequential(
+        self.dim_reduction = nn.Sequential(
             nn.Linear(self.features_dim, self.features_dim),
-            nn.Linear(self.features_dim, 1),
+            nn.Linear(self.features_dim, self.out_dim),
         )
         
 
-    def forward(self, observations) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, observations):
         # for hz in self.hzs: print(observations[hz].shape)
         
         latent_tensors = dict()
@@ -86,5 +87,5 @@ class CustomCNN(nn.Module):
         for hz_idx in range(len(self.hzs)-1):
             latent_state = self.mergers[self.hzs[hz_idx]](latent_state, latent_tensors[self.hzs[hz_idx+1]])
         
-        out = self.v(latent_state)
+        out = self.dim_reduction(latent_state)
         return out
