@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import h5py
 import exchange_calendars as xcals
+import numpy as np
 
 from torch.utils.data import get_worker_info
 
@@ -11,7 +12,7 @@ from torch.utils.data import get_worker_info
 class StockDatasetHDF5:
     '''Return "time series" of stock datasets in 5 horizons.'''
     def __init__(self,
-        ticker_list=None, date_range=None,
+        ticker_list=None, date_range=None, dtype=np.float32
     ):
         with h5py.File(H5PATH, 'r') as store:
             self._tickers = list(store['chart/inlisted_1m/'].keys()) + list(store['chart/delisted_1m/'].keys())
@@ -20,6 +21,7 @@ class StockDatasetHDF5:
         
         self.ticker_list = ticker_list if ticker_list else self._tickers
         self.date_range = date_range if date_range else [ST, ED]
+        self.dtype = dtype
         
         l = []
         for ticker in ticker_list:
@@ -46,6 +48,9 @@ class StockDatasetHDF5:
         dfs['1d'] = dfs['1d'].loc[st:ed]
         st = st - timedelta(days=st.isoweekday() - 1)
         dfs['1w'] = dfs['1w'].loc[st:ed]
+
+        for hz in THZ:
+            dfs[hz] = dfs[hz].astype(dtype=self.dtype)
         
         # 정보 추가
         dfs['ticker'] = self.ticker_list[index]

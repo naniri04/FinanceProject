@@ -5,6 +5,8 @@ from hdf5_loader import StockDatasetHDF5
 from myconfig import *
 import numpy as np
 import torch
+from copy import deepcopy
+from collections import defaultdict
 
 
 FEATURE_NUM = 5
@@ -42,39 +44,43 @@ def get_samples(hdf5_instance:StockDatasetHDF5, hz_dim, targ_hz, tensor=False):
                 if label[hz].shape[0] < LABEL_HORIZON: flag = True
             if flag: break
             
+            abs_chart = dict()
+            rel_chart = dict()
+            feature = dict()
+            info = dict()
+
             # split / pad
-            result = dict()
             for hz in THZ:
                 if (diff := curidx[hz] - hz_dim[hz]) >= 0:
-                    result[hz] = temp[hz][diff:curidx[hz]]
+                    abs_chart[hz] = temp[hz][diff:curidx[hz]]
                 else:
-                    result[hz] = np.pad(temp[hz][:curidx[hz]], pad_width=((-diff, 0),(0,0)), mode='constant', constant_values=0)
-                    
-            result['current_price'] = result[targ_hz][-1, 3]
+                    abs_chart[hz] = np.pad(temp[hz][:curidx[hz]], pad_width=((-diff, 0),(0,0)), mode='constant', constant_values=0)
+
+            info['current_price'] = abs_chart[targ_hz][-1, 3]
             
-            # add local feature
+            # relative prices
             for hz in THZ:
                 loc_feats = []
                 # 1. relative prices
                 for f in range(4):
-                    loc_feats.append(rate(result[hz][:, f], result['current_price']))
+                    loc_feats.append(rate(abs_chart[hz][:, f], info['current_price']))
                 # 2. relative time
-                loc_feats.append(((result[hz][-1, 7] - result[hz][:, 7]) // UNIT_TS[hz]))
-                loc_feats[-1][loc_feats[-1] == result[hz][-1, 7]//UNIT_TS[hz]] = 0
+                loc_feats.append(((abs_chart[hz][-1, 7] - abs_chart[hz][:, 7]) // UNIT_TS[hz]))
+                loc_feats[-1][loc_feats[-1] == abs_chart[hz][-1, 7]//UNIT_TS[hz]] = 0
                 
-                result[hz] = np.stack(loc_feats).astype(np.float32)
+                rel_chart[hz] = np.stack(loc_feats).astype(np.float32)
                 
             for hz in THZ:
-                label[hz] = rate(label[hz], result['current_price'])
+                label[hz] = rate(label[hz], info['current_price'])
                 
             if tensor:
                 for hz in THZ:
-                    result[hz] = torch.Tensor(result[hz])
+                    rel_chart[hz] = torch.Tensor(rel_chart[hz])
                     label[hz] = torch.Tensor(label[hz])
             
-            yield result, label
+            yield rel_chart, feature, label, info
             
-        yield 0, 0
+        yield 0, 0, 0, 0
         
 
 def get_label(labels, label_weight):
@@ -82,3 +88,50 @@ def get_label(labels, label_weight):
     for i, hz in enumerate(THZ):
         result[i] = torch.mean(labels[hz], dim=1) * label_weight[hz]
     return torch.sum(result, dim=0)
+
+
+from matplotlib.ticker import FormatStrFormatter
+import seaborn as sns
+import matplotlib.pyplot as plt
+pal = ['r', 'g', 'b', 'c', 'k']
+
+def plot_chart(raws:torch.Tensor, hz_dim, visual_keys:list=None):
+    visual_keys = visual_keys if visual_keys else THZ
+
+    fig, ax = plt.subplots(len(raws), 5, figsize=(10, 1*len(raws)))
+    fig.tight_layout()
+    for i in range(len(raws)):
+        for j, hz in enumerate(visual_keys):
+            d = raws[i,j,3]
+            d[d == 0] = np.nan
+            targ_ax = (ax[j] if len(raws)==1 else ax[i, j])
+            sns.lineplot(d, ax=targ_ax, c=pal[j])
+            targ_ax.set_xlim(0, hz_dim[hz])
+            targ_ax.yaxis.set_major_formatter(FormatStrFormatter("%.1f"))
+
+
+def batch_maker(envgen, batch_size:int):
+    '''Output shape = (batch, hz, features, seq_len)'''
+    rel_charts = [[] for _ in range(5)]; labels = [[] for _ in range(5)]; features = [[] for _ in range(5)]
+    infos = []
+
+    for batch_i in range(batch_size):
+        rel_chart, feature, label, info = next(envgen)
+        if rel_chart:
+            for i, hz in enumerate(THZ):
+                rel_charts[i].append(rel_chart[hz])
+                labels[i].append(label[hz])
+                # features[i].append(feature[hz])
+            infos.append(info)
+        else: continue
+        
+    for i in range(5): 
+        rel_charts[i] = torch.stack(rel_charts[i])
+        labels[i] = torch.stack(labels[i])
+        # features[i] = torch.stack(features[i])
+
+    rel_charts = torch.stack(rel_charts, axis=1)
+    labels = torch.stack(labels, axis=1)
+    # features = torch.stack(features, axis=1)
+
+    return rel_charts, features, labels, infos

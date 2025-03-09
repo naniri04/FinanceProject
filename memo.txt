@@ -1,2 +1,5 @@
 highlight = shift+f9
 bookmark = ctrl+alt+b
+
+미장 시간: 서머타임 이외 -> 09:30 ~ 16:00
+          서머타임 -> 08:30 ~ 15:00

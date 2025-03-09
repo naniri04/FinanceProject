@@ -64,28 +64,30 @@ class CustomCNN(nn.Module):
         for hz_idx in range(len(self.hzs)-1):
             cur_hz, next_hz = self.hzs[hz_idx], self.hzs[hz_idx+1]
             self.mergers[cur_hz] = CustomAddLayer(hz_latent_dim[cur_hz], hz_latent_dim[next_hz])
+        self.mergers = nn.ModuleDict(self.mergers)
 
         # Update the features dim manually
         self.features_dim = hz_latent_dim[next_hz]
         
-        self.dim_reduction = nn.Sequential(
+        self.mu_layer = nn.Sequential(
+            nn.Linear(self.features_dim, self.features_dim),
+            nn.Linear(self.features_dim, self.out_dim),
+        )
+        self.sigma_layer = nn.Sequential(
             nn.Linear(self.features_dim, self.features_dim),
             nn.Linear(self.features_dim, self.out_dim),
         )
         
 
-    def forward(self, observations):
-        # for hz in self.hzs: print(observations[hz].shape)
-        
+    def forward(self, observations):        
         latent_tensors = dict()
-        for hz in self.hzs:
-            latent_tensors[hz] = self.extractors[hz](observations[hz])
-            
-        # for hz in self.hzs: print(latent_tensors[hz].shape)
+        for i, hz in enumerate(self.hzs):
+            latent_tensors[hz] = self.extractors[hz](observations[:,i])
         
         latent_state = latent_tensors[self.hzs[0]]
         for hz_idx in range(len(self.hzs)-1):
             latent_state = self.mergers[self.hzs[hz_idx]](latent_state, latent_tensors[self.hzs[hz_idx+1]])
         
-        out = self.dim_reduction(latent_state)
-        return out
+        mu = self.mu_layer(latent_state)
+        sigma = self.sigma_layer(latent_state)
+        return torch.stack((mu, sigma), dim=1)
